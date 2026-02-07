@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fake News Detector</title>
+    <!-- Bootstrap CSS for responsive design -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Custom CSS -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="container min-vh-100 d-flex align-items-center justify-content-center py-5">
+        <div class="content-wrapper">
+            <!-- Header Section -->
+            <div class="header-section mb-5">
+                <h1 class="main-title">
+                    <i class="icon">🔍</i> Fake News Detector
+                </h1>
+                <p class="subtitle">Paste a news article below and we'll help you determine if it's real or fake</p>
+            </div>
+
+            <!-- Main Card -->
+            <div class="card shadow-lg border-0 main-card">
+                <div class="card-body p-4 p-md-5">
+                    
+                    <!-- Input Section -->
+                    <div class="input-section mb-4">
+                        <label for="newsText" class="form-label input-label">
+                            📝 News Article Text
+                        </label>
+                        <textarea 
+                            id="newsText" 
+                            class="form-control input-field" 
+                            placeholder="Paste the news article here... Also add any details like source, date, or context that you can remember."
+                            rows="8"
+                        ></textarea>
+                        <small class="form-text text-muted mt-2">
+                            The longer the text, the more accurate the prediction can be.
+                        </small>
+                    </div>
+
+                    <!-- Button Section -->
+                    <div class="button-section mb-4">
+                        <button 
+                            id="checkBtn" 
+                            class="btn btn-primary check-button w-100"
+                            onclick="checkNews()"
+                        >
+                            <span class="button-text">Check News</span>
+                            <span id="loadingSpinner" class="spinner-border spinner-border-sm ms-2" role="status" aria-hidden="true" style="display: none;"></span>
+                        </button>
+                    </div>
+
+                    <!-- Result Section (hidden by default) -->
+                    <div id="resultSection" class="result-section" style="display: none;">
+                        <div id="resultCard" class="result-card">
+                            <!-- Result will be inserted here dynamically -->
+                        </div>
+                    </div>
+
+                    <!-- Error Section (hidden by default) -->
+                    <div id="errorSection" class="alert alert-danger" role="alert" style="display: none;">
+                        <strong>⚠️ Error:</strong> <span id="errorText"></span>
+                    </div>
+
+                </div>
+            </div>
+
+            <!-- Footer Section -->
+            <div class="footer-section mt-5 text-center">
+                <p class="footer-text">
+                    <small>
+                        This tool uses machine learning to predict if news is real or fake based on textual analysis.
+                        <br>
+                        Always fact-check with multiple reliable sources for important decisions.
+                    </small>
+                </p>
+            </div>
+
+        </div>
+    </div>
+
+    <!-- Bootstrap JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+
+    <script>
+        /**
+         * Check the news article for authenticity
+         */
+        function checkNews() {
+            // Get the news text from textarea
+            const newsText = document.getElementById('newsText').value.trim();
+            
+            // Validate input
+            if (!newsText) {
+                showError('Please paste a news article to check');
+                return;
+            }
+
+            if (newsText.length < 10) {
+                showError('Please provide a longer text for better accuracy (at least 10 characters)');
+                return;
+            }
+
+            // Show loading state
+            const checkBtn = document.getElementById('checkBtn');
+            const loadingSpinner = document.getElementById('loadingSpinner');
+            checkBtn.disabled = true;
+            loadingSpinner.style.display = 'inline-block';
+
+            // Hide previous results/errors
+            document.getElementById('errorSection').style.display = 'none';
+            document.getElementById('resultSection').style.display = 'none';
+
+            // Make API call to predict
+            fetch('/predict', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    news_text: newsText
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                // Reset loading state
+                checkBtn.disabled = false;
+                loadingSpinner.style.display = 'none';
+
+                if (data.error) {
+                    showError(data.error);
+                } else {
+                    displayResult(data);
+                }
+            })
+            .catch(error => {
+                // Reset loading state
+                checkBtn.disabled = false;
+                loadingSpinner.style.display = 'none';
+                showError('An error occurred. Please try again.');
+                console.error('Error:', error);
+            });
+        }
+
+        /**
+         * Display the prediction result
+         */
+        function displayResult(data) {
+            const resultCard = document.getElementById('resultCard');
+            const resultSection = document.getElementById('resultSection');
+            
+            // Determine styling based on prediction
+            const isReal = data.prediction === 1;
+            const resultClass = isReal ? 'result-real' : 'result-fake';
+            const badgeClass = isReal ? 'badge-success' : 'badge-danger';
+            const icon = isReal ? '✓' : '✗';
+            const iconClass = isReal ? 'icon-real' : 'icon-fake';
+            
+            // Create result card HTML
+            resultCard.innerHTML = `
+                <div class="result-indicator ${resultClass}">
+                    <div class="result-icon ${iconClass}">${icon}</div>
+                </div>
+                <div class="result-content">
+                    <h3 class="result-label">
+                        <span class="badge ${badgeClass} badge-lg">${data.label}</span>
+                    </h3>
+                    <div class="result-confidence">
+                        <strong>Confidence:</strong>
+                        <div class="confidence-bar">
+                            <div class="confidence-fill" style="width: ${data.confidence}%; background-color: ${isReal ? '#28a745' : '#dc3545'};">
+                                <span class="confidence-text">${data.confidence}%</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="result-description mt-3">
+                        ${isReal 
+                            ? '<p><strong>✓ This appears to be REAL news</strong><br><small>The text contains characteristics typical of legitimate news articles.</small></p>'
+                            : '<p><strong>✗ This appears to be FAKE news</strong><br><small>The text contains characteristics typical of misleading or false articles.</small></p>'
+                        }
+                    </div>
+                </div>
+            `;
+            
+            // Show result section
+            resultSection.style.display = 'block';
+            
+            // Scroll to result
+            resultSection.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+
+        /**
+         * Display error message
+         */
+        function showError(message) {
+            const errorSection = document.getElementById('errorSection');
+            const errorText = document.getElementById('errorText');
+            errorText.textContent = message;
+            errorSection.style.display = 'block';
+            errorSection.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+
+        /**
+         * Allow checking news with Enter key (Ctrl+Enter for multiline textarea)
+         */
+        document.getElementById('newsText').addEventListener('keydown', function(event) {
+            // Check on Ctrl+Enter or Cmd+Enter
+            if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') {
+                checkNews();
+            }
+        });
+
+        /**
+         * Clear results when user starts typing in textarea
+         */
+        document.getElementById('newsText').addEventListener('input', function() {
+            document.getElementById('resultSection').style.display = 'none';
+            document.getElementById('errorSection').style.display = 'none';
+        });
+    </script>
+</body>
+</html>
